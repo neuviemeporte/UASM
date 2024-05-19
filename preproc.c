@@ -183,7 +183,6 @@ static void ExpandObjCalls(char *line, struct asm_tok tokenarray[])
 		pRefStr = refStr;
 		didExpand = FALSE;
 		paramCount = 0;
-		const int size_refStr = strlen(refStr);
 		for (i = 0; i < Token_Count; i++)
 		{
 			if (tokenarray[i].token == T_POINTER)
@@ -544,7 +543,7 @@ static void ExpandObjCalls(char *line, struct asm_tok tokenarray[])
 					if (derefCount > 0)
 					{
 						strcpy(pStr, refStr);
-						pStr += size_refStr;
+						pStr += strlen(refStr);
 						pStr = strcpy(pStr, ",") + 1;
 					}
 					if (derefCount == 0 && !type->sym.isPtrTable)
@@ -1099,12 +1098,6 @@ int PreprocessLine( char *line, struct asm_tok tokenarray[] )
 
 	ModuleInfo.CurrComment = NULL;
     ModuleInfo.line_flags = 0;
-
-	/* UASM 2.48 Ensure these are reset here in pre-process, as this can be set on a line that 
-	still requires expansion, and then they accidentally remain set when moving onto a regular line via codegen */
-	//decoflags = 0;
-	//broadflags = 0;
-	//evexflag = 0;
 
     Token_Count = Tokenize( line, 0, tokenarray, TOK_DEFAULT );
 

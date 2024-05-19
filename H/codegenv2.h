@@ -17,7 +17,8 @@ enum instr_group {
 	MVX0,
 	FP0,
 	FP1,
-	MMX0
+	MMX0,
+	EVX1
 };
 
 enum seg_prefix {
@@ -132,7 +133,7 @@ enum op_type {
 	IMM8,
 	IMM16,
 	IMM32,
-  IMM48,
+    IMM48,
 	IMM64, /* 64bit ONLY immediate */	
 	R_STI,
 	R_ST0,

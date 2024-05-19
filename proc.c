@@ -281,6 +281,8 @@ static void SetLocalOffsets_RBP(struct proc_info *info);
 static void pop_register(uint_16 *regist);
 static void WriteSEHData(struct dsym *proc);
 
+static void SetLocalOffsets_RBP_SYSV(struct proc_info* info);
+
 #if OWFC_SUPPORT
 /* register usage for OW fastcall (register calling convention).
 * registers are used for parameter size 1,2,4,8.
@@ -2163,8 +2165,7 @@ static void ProcFini(struct dsym *proc)
 #if FASTPASS
 		LstSetPosition(); /* needed if generated code is done BEFORE the line is listed */
 #endif
-						  /* Don't attempt to write SEH data for SYSTEM V calls */
-		if (proc->sym.langtype != LANG_SYSVCALL)
+		if(proc->sym.langtype != LANG_SYSVCALL)
 			WriteSEHData(proc);
 	}
 #endif
@@ -2175,10 +2176,15 @@ static void ProcFini(struct dsym *proc)
 	if (Parse_Pass == PASS_1) {
 		/* in case the procedure is empty, init addresses of local variables ( for proper listing ) */
 		if (ProcStatus & PRST_PROLOGUE_NOT_DONE) {
-			if (ModuleInfo.basereg[USE64] == T_RSP)
+			if (ModuleInfo.basereg[USE64] == T_RSP) {
 				SetLocalOffsets_RSP(CurrProc->e.procinfo);
-			else
+			}
+			else if (proc->sym.langtype == LANG_SYSVCALL) {
+				SetLocalOffsets_RBP_SYSV(CurrProc->e.procinfo);
+			}
+			else {
 				SetLocalOffsets_RBP(CurrProc->e.procinfo);
+			}
 		}
 		SymGetLocal((struct asym *)CurrProc);
 	}
@@ -4344,20 +4350,22 @@ static void write_sysv_default_prologue_RBP(struct proc_info *info)
 	int                 i = 0;
 	int                 cnt;
 	int                 cntxmm;
-	int                 stackadj;
+	int                 stackadj = 0;
 	int                 resstack = ((ModuleInfo.win64_flags & W64F_AUTOSTACKSP) ? sym_ReservedStack->value : 0);
 
 	DebugMsg1(("write_sysv_default_prologue_RBP enter\n"));
 
 	info->pushed_reg = 0;
 
+	//if (info->stackAdj % 16 != 0) stackadj = 8;
+
 	/* Only setup a stack-frame for RBP if there are locals or parameters */
-	//stackadj = 8;
+	stackadj += 8;
 	if (!info->fpo && GetRegNo(info->basereg) != 4 && (info->parasize != 0 || info->locallist != NULL))
 	{
 		AddLineQueueX("push %r", info->basereg);
 		AddLineQueueX("mov %r, %r", info->basereg, T_RSP);
-		//stackadj = 0;
+		stackadj -= 8;
 	}
 	/* after the "push rbp", the stack is xmmword aligned (except if we didn't push rbp) */
 
@@ -4393,21 +4401,21 @@ static void write_sysv_default_prologue_RBP(struct proc_info *info)
 
 	if (info->fpo)
 	{
-		if (info->pushed_reg % 2 == 0)
-			stackadj = 8;
-		else
-			stackadj = 0;
+		if (info->pushed_reg % 2 == 0 && info->pushed_reg > 0)
+			stackadj += 8;
+		else if (info->pushed_reg % 2 == 0)
+			stackadj += 0;
 	}
 	else
 	{
 		if (info->pushed_reg % 2 == 0)
-			stackadj = 0;
+			stackadj += 0;
 		else
-			stackadj = 8;
+			stackadj += 8;
 	}
 
 	/* Allocate space for local variables */
-	if ((info->localsize + resstack + stackadj) > 0)
+	if ((info->localsize + resstack) > 0)
 	{
 		DebugMsg1(("write_sysv_default_prologue_RBP: localsize=%u\n", info->localsize));
 		/* SUB  RSP, localsize */
@@ -4426,8 +4434,8 @@ static void write_sysv_default_prologue_RBP(struct proc_info *info)
 			}
 		}
 	}
-	/* No locals, still account for stackadj */
-	else if (stackadj > 0)
+	/* No locals, still account for stackadj but only if not a leaf */
+	else if (stackadj > 0 && !info->isleaf)
 	{
 		if (Options.frameflags)
 		{
@@ -4474,21 +4482,22 @@ static void write_sysv_default_epilogue_RBP(struct proc_info *info)
 {
 	int  resstack = ((ModuleInfo.win64_flags & W64F_AUTOSTACKSP) ? sym_ReservedStack->value : 0);
 
-	int  stackadj = 0;
+	int  stackadj = 0;// info->stackAdj;
+	//if (stackadj % 16 != 0) stackadj = 8;
 
 	if (info->fpo)
 	{
-		if (info->pushed_reg % 2 == 0)
-			stackadj = 8;
-		else
-			stackadj = 0;
+		if (info->pushed_reg % 2 == 0 && info->pushed_reg != 0)
+			stackadj += 8;
+		else if (info->pushed_reg != 0)
+			stackadj += 0;
 	}
 	else
 	{
-		if (info->pushed_reg % 2 == 0)
-			stackadj = 0;
-		else
-			stackadj = 8;
+		if (info->pushed_reg % 2 == 0 && info->pushed_reg != 0)
+			stackadj += 0;
+		else if (info->pushed_reg != 0)
+			stackadj += 8;
 	}
 
 	/* Restore USED vector registers */
@@ -4535,7 +4544,18 @@ static void write_sysv_default_epilogue_RBP(struct proc_info *info)
 	/* No Sub RSP, use RedZone optimisation */
 	if (ModuleInfo.redzone == 1 && (info->localsize + resstack < 128) && resstack == 0)
 		;
-	else if (info->localsize + stackadj > 0)
+	else if (info->localsize > 0)
+	{
+		if (Options.frameflags)
+		{
+			AddLineQueueX("lea %r, [%r+%d]", stackreg[ModuleInfo.Ofssize], stackreg[ModuleInfo.Ofssize], NUMQUAL info->localsize + stackadj);
+		}
+		else
+		{
+			AddLineQueueX("add %r, %d", stackreg[ModuleInfo.Ofssize], NUMQUAL info->localsize + stackadj);
+		}
+	}
+	else if (stackadj > 0 && !info->isleaf)
 	{
 		if (Options.frameflags)
 		{
@@ -4844,6 +4864,7 @@ static ret_code write_default_prologue(void)
 	struct proc_info    *info;
 	uint_8              oldlinenumbers;
 	int                 resstack = 0;
+	bool                OldState = FALSE;
 
 	info = CurrProc->e.procinfo;
 
@@ -4885,7 +4906,10 @@ runqueue:
 	*/
 	oldlinenumbers = Options.line_numbers;
 	Options.line_numbers = FALSE; /* temporarily disable line numbers */
+	OldState = UseSavedState; /* UASM 2.56 - we need this to ensure we don't accidental generate duplicate symbol definitions */
+	UseSavedState = FALSE;
 	RunLineQueue();
+	UseSavedState = OldState;
 	Options.line_numbers = oldlinenumbers;
 
 	if (ModuleInfo.list && UseSavedState && (Parse_Pass > PASS_1))

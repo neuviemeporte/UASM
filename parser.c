@@ -438,6 +438,7 @@ static bool IsScalarSimdInstr(enum instr_token instr)
 	case T_VSUBSD:
 	case T_VUCOMISS:
 	case T_VUCOMISD:
+    case T_VPBROADCASTD:
 		result = TRUE;
 		break;
 	default:
@@ -950,6 +951,14 @@ ret_code segm_override( const struct expr *opndx, struct code_info *CodeInfo )
     return( NOT_ERROR );
 }
 
+/* UASM 2.56 - improved check if an immediate fits in 32bits */
+static char fits32(int_64 val) {
+    uint64_t top = ((uint64_t)val) >> 32;
+    if (top == 0 || top == 0x00000000ffffffff)
+        return TRUE;
+    return FALSE;
+}
+
 /* get an immediate operand without a fixup.
  * output:
  * - ERROR: error
@@ -975,7 +984,7 @@ static ret_code idata_nofixup( struct code_info *CodeInfo, unsigned CurrOpnd, co
     CodeInfo->opnd[CurrOpnd].data32l = value;
 
 	/* 64bit immediates are restricted to MOV <reg>,<imm64> */
-	if (opndx->value64 > 0xFFFFFFFF && (CodeInfo->token != T_MOV || 
+	if (fits32(opndx->value64)==0 && (CodeInfo->token != T_MOV || 
 		(CodeInfo->token == T_MOV && (CodeInfo->opnd[OPND1].type & OP_R64) == 0) ))
 	{ 
 		/* magnitude > 64 bits? */
@@ -1754,14 +1763,13 @@ static ret_code memory_operand( struct code_info *CodeInfo, unsigned CurrOpnd, s
         CodeInfo->basereg = GetRegNo(base);
         CodeInfo->indexreg = GetRegNo(index);
     }
-
-
+    
     /* UASM 2.53 check for use of register assumed to ERROR in an EA */
     if (base != EMPTY && StdAssumeTable[GetRegNo(base)].error)
     {
         return(EmitError(USE_OF_REGISTER_ASSUMED_TO_ERROR));
     }
-    if (index != EMPTY && StdAssumeTable[GetRegNo(index)].error)
+    if (index != EMPTY && GetValueSp(index) & OP_XMM == 0 && GetValueSp(index) & OP_YMM == 0 && StdAssumeTable[GetRegNo(index)].error)
     {
         return(EmitError(USE_OF_REGISTER_ASSUMED_TO_ERROR));
     }
@@ -1926,8 +1934,9 @@ static ret_code memory_operand( struct code_info *CodeInfo, unsigned CurrOpnd, s
          * However, CMPSD and MOVSD are also SSE2 opcodes, so the fixups must be generated
          * anyways.
          */
-        if ( CodeInfo->token != T_XLAT && CodeInfo->token != T_XLATB ) 
-            CodeInfo->opnd[CurrOpnd].InsFixup = CreateFixup( sym, fixup_type, OPTJ_NONE );
+        if (CodeInfo->token != T_XLAT && CodeInfo->token != T_XLATB) {
+            CodeInfo->opnd[CurrOpnd].InsFixup = CreateFixup(sym, fixup_type, OPTJ_NONE);
+        }
     }
 
     if( set_rm_sib( CodeInfo, CurrOpnd, ss, index, base, sym ) == ERROR ) 
@@ -3305,7 +3314,7 @@ ret_code ParseLine(struct asm_tok tokenarray[]) {
 				}
 
 				/* v2.0: for generated code it's important that list file is written in ALL passes, to update file position! */
-				if (ModuleInfo.list && (Parse_Pass == PASS_1 || ModuleInfo.GeneratedCode || UseSavedState == FALSE))
+				if (ModuleInfo.list && (Parse_Pass == PASS_2 || ModuleInfo.GeneratedCode || UseSavedState == FALSE))
 					LstWriteSrcLine();
 				return(temp);
 
@@ -3380,7 +3389,7 @@ dataInProc:
 	CodeInfo.basereg   = 0xff;
 	CodeInfo.indexreg  = 0xff;
 	CodeInfo.zreg      = 0;
-	if (tokenarray[0].tokval >= T_KADDB && tokenarray[0].tokval <= T_KMOVW)
+	if (tokenarray[0].tokval >= T_KADDB && tokenarray[0].tokval <= T_KTESTQ)
 		CodeInfo.evex_flag = FALSE;
 	else 
 	{
@@ -4050,7 +4059,17 @@ dataInProc:
 			}
 		}
 	}
-	/* *********************************************************** */
+    
+    /* UASM 2.56 prevent RIP+REG encodings */
+    for (i = 0; i < 4; i++) {
+        if (opndx[i].base_reg != NULL && opndx[i].idx_reg != NULL) {
+            if (opndx[i].base_reg->tokval == T_RIP && opndx[i].idx_reg != NULL) {
+                return EmitErr(RIP_ONLY);
+            }
+        }
+    }
+
+    /* *********************************************************** */
 	/* Use the V2 CodeGen, else fallback to the standard CodeGen   */
 	/* *********************************************************** */
 	if (ModuleInfo.Ofssize == USE32 || ModuleInfo.Ofssize == USE64)

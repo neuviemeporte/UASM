@@ -832,6 +832,14 @@ VX_LL|VX_L,      /* VPMULTISHIFTQB */
   VX_NND,           /* PEXT          */
   VX_NND,           /* RORX          */
   
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+    VX_LL | VX_L,
+
   VX_L | VX_NND,      /* KADDB    */ /* v2.12 */
   VX_L | VX_NND,      /* KADDW    */ /* v2.12 */
   VX_L | VX_NND,      /* KANDB    */ /* v2.12 */
@@ -879,6 +887,10 @@ VX_LL|VX_L,      /* VPMULTISHIFTQB */
 		 VX_NND,      /* KMOVD    */
 		 VX_NND,      /* KMOVQ    */
 		 VX_NND,      /* KMOVW    */
+         VX_NND,      /* KTESTB    */
+         VX_NND,      /* KTESTW    */
+         VX_NND,      /* KTESTD    */
+         VX_NND,      /* KTESTQ    */
 //         VX_NND,      /* BNDMK   */
 #define avxins( tok, string, cpu, flgs ) flgs,
 #include "instravx.h"

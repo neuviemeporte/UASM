@@ -69,16 +69,17 @@ void InsertInstruction(struct Instr_Def* pInstruction, uint_32 hash)
 uint_32 GenerateInstrHash(struct Instr_Def* pInstruction)
 {
 	uint_8 hashBuffer[32];
-	int len = strlen(pInstruction->mnemonic);
+	int len = 0;
 	char* pDst = (char*)&hashBuffer;
 	strcpy(pDst, pInstruction->mnemonic);
 
 	/* String hash is case-insensitive. */
-	for (int i = 0; i < len; i++)
+	for (int i = 0; i < strlen(pInstruction->mnemonic); i++)
 	{
 		hashBuffer[i] = tolower(hashBuffer[i]);
 	}
 
+	len += strlen(pInstruction->mnemonic);
 	pDst += len;
 	*(pDst + 0) = pInstruction->operand_types[0];
 	*(pDst + 1) = pInstruction->operand_types[1];
@@ -93,7 +94,7 @@ uint_32 GenerateInstrHash(struct Instr_Def* pInstruction)
 void BuildInstructionTable(void)
 {
 	uint_32 hash = 0;
-	struct Instr_Def* pInstrTbl = &InstrTableV2;
+	struct Instr_Def* pInstrTbl = InstrTableV2;
 	uint_32 i = 0;
 	uint_32 instrCount = sizeof(InstrTableV2) / sizeof(struct Instr_Def);
 
@@ -444,6 +445,21 @@ bool IsValidInCPUMode(struct Instr_Def* instr)
 	if ((instr->cpu & P_PM) > (ModuleInfo.curr_cpu & P_PM))
 		result = FALSE;
 
+	return result;
+}
+
+/* =====================================================================
+  Given an input token (string) for a register name, check if it 
+  is a 16bit register.
+  ===================================================================== */
+bool IsReg16bit(struct asm_tok* regTok)
+{
+	bool result = FALSE;
+	if (regTok)
+	{
+		if (regTok->tokval >= T_AX && regTok->tokval <= T_DI)
+			result = TRUE;
+	}
 	return result;
 }
 
@@ -1546,12 +1562,21 @@ ret_code CodeGenV2(const char* instr, struct code_info* CodeInfo, uint_32 oldofs
 			}
 		}
 	}
+	/* UASM 2.56 force the use of 16bit memory addressing back to legacy codegen when in 32bit code */
+	if (CodeInfo->Ofssize == USE32) {
+		if ( opExpr[1].kind == EXPR_ADDR && (IsReg16bit(opExpr[1].base_reg) || IsReg16bit(opExpr[1].idx_reg)) ) {
+			return EMPTY;
+		}
+		if (opExpr[0].kind == EXPR_ADDR && (IsReg16bit(opExpr[0].base_reg) || IsReg16bit(opExpr[0].idx_reg))) {
+			return EMPTY;
+		}
+	}
 
 	/* Determine which Memory Encoding Format Table to Use. */
 	if (CodeInfo->Ofssize == USE64)
-		MemTable = &MemTable64;
+		MemTable = MemTable64;
 	else
-		MemTable = &MemTable32;
+		MemTable = MemTable32;
 
 	/* Force JWASM style FLAT: override back to legacy CodeGen. */
 	if ((opExpr[1].override && opExpr[1].override->tokval == T_FLAT) ||
@@ -1689,7 +1714,7 @@ ret_code CodeGenV2(const char* instr, struct code_info* CodeInfo, uint_32 oldofs
 		  /* Either the instruction can ONLY be EVEX encoded, or user requested VEX->EVEX promotion. */
 		else if ((matchedInstr->evexflags & EVEX_ONLY) != 0 ||
 			((CodeInfo->evex_flag) && (matchedInstr->vexflags & EVEX) != 0))
-			BuildEVEX(&needEVEX, &evexBytes, matchedInstr, opExpr, needB, needX, needRR, opCount, CodeInfo);	/* Create the EVEX prefix bytes if the instruction supports an EVEX form */
+			BuildEVEX(&needEVEX, evexBytes, matchedInstr, opExpr, needB, needX, needRR, opCount, CodeInfo);	/* Create the EVEX prefix bytes if the instruction supports an EVEX form */
 
 		if (CodeInfo->evex_flag && matchedInstr->evexflags == NO_EVEX)											/* Not possible to EVEX encode instruction per users request */
 			EmitError(NO_EVEX_FORM);

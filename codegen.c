@@ -590,6 +590,7 @@ static void output_opc(struct code_info *CodeInfo)
     }
 
 
+
   /* If there is no decoflags then it is AVX2 instruction with 3 parameters, Uasm 2.15 */
   if (CodeInfo->token >= T_VBROADCASTSS && CodeInfo->token <= T_VPBROADCASTMW2D)
       {
@@ -768,7 +769,7 @@ static void output_opc(struct code_info *CodeInfo)
                   /* first and second operand can not be memory, v2.46.11 */
                   if (CodeInfo->r1type < OP_XMM || CodeInfo->r2type < OP_XMM)    
                      EmitError(INVALID_INSTRUCTION_OPERANDS);
-                  if ((CodeInfo->reg2 <= 7)&&(CodeInfo->reg3 <= 7) && ((CodeInfo->opnd[OPND2].type & OP_M_ANY ) == 0))
+                  if ((CodeInfo->reg2 <= 7) && (CodeInfo->reg3 <= 7 || CodeInfo->reg3 == 255) && ((CodeInfo->opnd[OPND2].type & OP_M_ANY ) == 0))
                   goto outC5;    // go handle 0xC5 instruction
 
 					/* John: Validate 3 operand vex form */
@@ -2670,7 +2671,7 @@ static void output_opc(struct code_info *CodeInfo)
     return;
 }
 
-static void output_data(const struct code_info *CodeInfo, enum operand_type determinant, int index)
+static void output_data(struct code_info *CodeInfo, enum operand_type determinant, int index)
 /***************************************************************************************************/
 /*
  * output address displacement and immediate data;
@@ -2820,8 +2821,8 @@ static void output_data(const struct code_info *CodeInfo, enum operand_type dete
   			CodeInfo->opnd[index].InsFixup->locofs = GetCurrOffset();
 			if(CodeInfo->isptr)
 				OutputBytes((unsigned char *)&CodeInfo->opnd[index].data32l, size, NULL);
-			else
-				OutputBytes((unsigned char *)&CodeInfo->opnd[index].data32l, size, CodeInfo->opnd[index].InsFixup);
+            else
+                OutputBytes((unsigned char*)&CodeInfo->opnd[index].data32l, size, CodeInfo->opnd[index].InsFixup);
           return;
         }
       }
@@ -3279,10 +3280,10 @@ static ret_code check_operand_2( struct code_info *CodeInfo, enum operand_type o
 
         output_opc( CodeInfo );
         output_data( CodeInfo, opnd1, OPND1 );
-#if AMD64_SUPPORT
+
         if ( CodeInfo->Ofssize == USE64 && CodeInfo->opnd[OPND1].InsFixup && CodeInfo->opnd[OPND1].InsFixup->type == FIX_RELOFF32 )
             CodeInfo->opnd[OPND1].InsFixup->addbytes = GetCurrOffset() - CodeInfo->opnd[OPND1].InsFixup->locofs;
-#endif
+
         return( NOT_ERROR );
     }
 
@@ -3365,7 +3366,42 @@ ret_code codegen( struct code_info *CodeInfo, uint_32 oldofs )
                CodeInfo->rm_byte, CodeInfo->sib,
                CodeInfo->prefix.rex, CodeInfo->prefix.opsiz ));
 #endif
-	
+
+    /* UASM 2.56 - Validate the proper usage of SARX,SHLX, SHRX */
+    if (CodeInfo->token == T_SARX || CodeInfo->token == T_SHLX || CodeInfo->token == T_SHRX)
+    {
+        if((CodeInfo->opnd[0].type & OP_R) == 0)
+            EmitError(INVALID_INSTRUCTION_OPERANDS);
+        if (((CodeInfo->opnd[1].type & OP_R) == 0) && ((CodeInfo->opnd[1].type & OP_M) == 0))
+            EmitError(INVALID_INSTRUCTION_OPERANDS);
+        if ((CodeInfo->opnd[2].type & OP_I) == 0)
+            EmitError(INVALID_INSTRUCTION_OPERANDS);
+    }
+
+    /* UASM 2.56 - Validate proper usage of VPBROADCASTn as legacy CODEGEN only handles AVX2 (not 512) */
+    if (CodeInfo->token == T_VPBROADCASTB ||
+        CodeInfo->token == T_VPBROADCASTW ||
+        CodeInfo->token == T_VPBROADCASTD ||
+        CodeInfo->token == T_VPBROADCASTQ) {
+        if (CodeInfo->opnd[1].type & OP_R) {
+            EmitError(INVALID_INSTRUCTION_OPERANDS);
+        }
+    }
+
+    /* UASM 2.55 - Validate the proper usage of CRC32 and warn of no memory sizing */
+    if (CodeInfo->token == T_CRC32)
+    {
+        if ( ((CodeInfo->opnd[0].type & OP_R64) != 0 && (CodeInfo->opnd[1].type & OP_R16) != 0) || 
+             ((CodeInfo->opnd[0].type & OP_R64) != 0 && (CodeInfo->opnd[1].type & OP_R32) != 0))
+        {
+            EmitError(INVALID_INSTRUCTION_OPERANDS);
+        }
+        if (CodeInfo->opnd[1].type == OP_M) 
+        {
+            EmitWarn(2, SIZE_NOT_SPECIFIED_ASSUMING, "BYTE");
+        }
+    }
+
     /* UASM 2.50 error for movq xmmN,r32 */
     if (CodeInfo->token == T_MOVQ && CodeInfo->opnd[0].type == OP_XMM)
     {
@@ -3438,7 +3474,7 @@ ret_code codegen( struct code_info *CodeInfo, uint_32 oldofs )
                 retcode = check_operand_2( CodeInfo, CodeInfo->opnd[OPND1].type );
                 break;
             }
-            if( retcode == NOT_ERROR) {
+            if(retcode == NOT_ERROR) {
                 if (CurrFile[LST])
                 {
                     LstWrite(LSTTYPE_CODE, oldofs, NULL);

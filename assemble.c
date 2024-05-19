@@ -113,9 +113,17 @@ static const struct format_options formatoptions[] = {
 #endif
 };
 
+#if AVXSUPP
+unsigned char           decoflags;          /* EVEX  sets up decorator flags in P2: z, aaa   */
+unsigned char           broadflags;         /* EVEX  sets up decorator flags in P2: b        */
+unsigned char           evex;               /* EVEX  encoding  */
+unsigned char           evexflag;			/* UASM 2.48 User specified EVEX promotion */
+#endif
+
+unsigned char           MODULEARCH;			/* MODULE Architecutre <avx or sse> */
+
 struct module_info      ModuleInfo;
 unsigned int            Parse_Pass;     /* assembly pass */
-//unsigned int            GeneratedCode; /* v2.10: moved to ModuleInfo */
 struct qdesc            LinnumQueue;    /* queue of line_num_info items */
 
 bool write_to_file;     /* write object module */
@@ -374,26 +382,18 @@ void OutputBytes( const unsigned char *pbytes, int len, struct fixup *fixup )
 {
     if( write_to_file == TRUE ) {
         uint_32 idx = CurrSeg->e.seginfo->current_loc - CurrSeg->e.seginfo->start_loc;
-#if 0 /* def DEBUG_OUT */
-        if ( CurrSeg->e.seginfo->current_loc < CurrSeg->e.seginfo->start_loc )
-            _asm int 3;
-#endif
-        /**/myassert( CurrSeg->e.seginfo->current_loc >= CurrSeg->e.seginfo->start_loc );
+        /*myassert(CurrSeg->e.seginfo->current_loc >= CurrSeg->e.seginfo->start_loc);*/
         if( Options.output_format == OFORMAT_OMF && ((idx + len) > MAX_LEDATA_THRESHOLD ) ) {
             omf_FlushCurrSeg();
             idx = CurrSeg->e.seginfo->current_loc - CurrSeg->e.seginfo->start_loc;
         }
         if ( fixup )
             store_fixup( fixup, CurrSeg, (int_32 *)pbytes );
-        //DebugMsg(("OutputBytes: buff=%p, idx=%" I32_SPEC "X, byte=%X\n", CurrSeg->e.seginfo->CodeBuffer, idx, *pbytes ));
         memcpy( &CurrSeg->e.seginfo->CodeBuffer[idx], pbytes, len );
     }
 #if 1
     /* check this in pass 1 only */
     else if( CurrSeg->e.seginfo->current_loc < CurrSeg->e.seginfo->start_loc ) {
-        DebugMsg(("OutputBytes: segment start loc changed from %" I32_SPEC "Xh to %" I32_SPEC "Xh\n",
-                  CurrSeg->e.seginfo->start_loc,
-                  CurrSeg->e.seginfo->current_loc));
         CurrSeg->e.seginfo->start_loc = CurrSeg->e.seginfo->current_loc;
     }
 #endif
@@ -542,6 +542,8 @@ static ret_code WriteModule( struct module_info *modinfo )
     return( NOT_ERROR );
 }
 
+/* The macro is_valid_first_char is defined differently in globals.h */
+#undef is_valid_first_char
 #define is_valid_first_char( ch )  ( isalpha(ch) || ch=='_' || ch=='@' || ch=='$' || ch=='?' || ch=='.' )
 
 /* check name of text macros defined via -D option */
@@ -1036,7 +1038,8 @@ static void PassOneChecks( void )
          * "elsewhere" ).
          */
 #if FASTPASS
-        if ( curr->sym.altname ) 
+        /* UASM 2.55 , altname is set to 1 when the type is undefined */
+        if ( curr->sym.altname > 1 ) 
 		{
             if ( curr->sym.altname->state == SYM_INTERNAL ) 
 			{
@@ -1070,10 +1073,9 @@ static void PassOneChecks( void )
     }
 #endif
 
-    if ( ModuleInfo.g.error_count == 0 ) {
-
-        /* make all symbols of type SYM_INTERNAL, which aren't
-         a constant, public.  */
+    if ( ModuleInfo.g.error_count == 0 ) 
+    {
+        /* make all symbols of type SYM_INTERNAL, which aren't a constant, public.  */
         if ( Options.all_symbols_public )
             SymMakeAllSymbolsPublic();
 
@@ -1083,7 +1085,6 @@ static void PassOneChecks( void )
         if ( ModuleInfo.g.Pass1Checks )
             ModuleInfo.g.Pass1Checks( &ModuleInfo );
     }
-
 
     return;
 }

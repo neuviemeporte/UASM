@@ -1980,6 +1980,15 @@ insx(PDEP,  pdep,             OpCls( R,        R,        R_MS ), F_F20F38,1,  no
 insx(PEXT,  pext,             OpCls( R,        R,        R_MS ), F_F30F38,1,  no_WDS, 0xF5,    0x00,      P_686|P_AVX, 0, RWF_VEX)
 insx(RORX, rorx,              OpCls( R,        R_MS,     I8_U ), F_F20F3A,1,  no_WDS, 0xF0,    0x00,      P_686|P_AVX, 0, RWF_VEX)
 
+insx(VPDPBUSDS, vpdpbusds, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(VPDPBUSD, vpdpbusd, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(VPDPWSSDS, vpdpwssds, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(VPDPWSSD, vpdpwssd, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+
+insx(VGF2P8MULB, vgf2p8mulb, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(VGF2P8AFFINEQB, vgf2p8affineqb, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(VGF2P8AFFINEINVQB, vgf2p8affineinvqb, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+
 /* MASK INSTRUCTIONS */
 insx(KADDB,     kaddb,    OpCls(K,         K,        K),     F_660F,      1,    no_WDS,     0x4A,      0x00,      P_686|P_AVX, 1, RWF_VEX)
 insx(KADDW,     kaddw,    OpCls(K,         K,        K),     F_0F,        1,    no_WDS,     0x4A,      0x00,      P_686|P_AVX, 0, RWF_VEX)
@@ -2025,11 +2034,6 @@ insx(KSHIFTRW,  kshiftrw, OpCls(K,         K,     I8_U),    F_660F3A,     1,    
 insx(KSHIFTRD,  kshiftrd, OpCls(K,         K,     I8_U),    F_660F3A,     1,         0,     0x31,      0x00,      P_686|P_AVX, 1, RWF_VEX)
 insx(KSHIFTRQ,  kshiftrq, OpCls(K,         K,     I8_U),    F_660F3A,     1,         0,     0x31,      0x00,      P_686|P_AVX, 1, RWF_VEX)
 
-insx(KTESTB, ktestb, OpCls(K, K, NONE), F_660F, 1, no_WDS, 0x99, 0x00, P_686 | P_AVX, 1, RWF_VEX)
-insx(KTESTW, ktestw, OpCls(K, K, NONE), F_0F, 1, no_WDS, 0x99, 0x00, P_686 | P_AVX, 0, RWF_VEX)
-insx(KTESTD, ktestd, OpCls(K, K, NONE), F_660F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
-insx(KTESTQ, ktestq, OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
-
 insx(KMOVB,  kmovb,       OpCls(K,         K,     NONE),     F_660F,      1,    no_WDS,     0x90,      0x00,      P_686|P_AVX, 0, RWF_VEX)
 insn(KMOVB,      1,       OpCls(K,       M08,     NONE),     F_660F,      1,    no_WDS,     0x90,      0x00,      P_686|P_AVX, 0)
 insn(KMOVB,      2,       OpCls(M08,       K,     NONE),     F_660F,      0,    no_WDS,     0x91,      0x00,      P_686|P_AVX, 0)
@@ -2050,4 +2054,11 @@ insn(KMOVW,      1,       OpCls(K,       M16,     NONE),     F_0F,        1,    
 insn(KMOVW,      2,       OpCls(M16,       K,     NONE),     F_0F,        0,         0,     0x91,      0x00,      P_686|P_AVX, 0)
 insn(KMOVW,      3,       OpCls(K,       R32,     NONE),     F_0F,        1,         0,     0x92,      0x00,      P_686|P_AVX, 0)
 insn(KMOVW,      4,       OpCls(R32,       K,     NONE),     F_0F,        1,         0,     0x93,      0x00,      P_686|P_AVX, 0)
+
+/* Don't forget to update parser line 3382 to evex exclusions */
+insx(KTESTB, ktestb,      OpCls(K, K, NONE), F_660F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 1, RWF_VEX)
+insx(KTESTW, ktestw,      OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 0, RWF_VEX)
+insx(KTESTD, ktestd,      OpCls(K, K, NONE), F_660F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+insx(KTESTQ, ktestq,      OpCls(K, K, NONE), F_0F, 1, 0, 0x99, 0x00, P_686 | P_AVX, 2, RWF_VEX)
+
 #endif

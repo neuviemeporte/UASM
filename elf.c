@@ -1163,6 +1163,7 @@ static void write_relocs64( struct dsym *curr )
                 symidx = fixup->sym->segment->ext_idx;
             }
 #endif
+            reloc64.r_addend += *(int_32*)(curr->e.seginfo->CodeBuffer + fixup->locofs);
             elftype = R_X86_64_PC32;
             break;
         case FIX_OFF64:        elftype = R_X86_64_64;          break;
@@ -1374,7 +1375,7 @@ static ret_code elf_write_module( struct module_info *modinfo )
 void elf_init( struct module_info *modinfo )
 /******************************************/
 {
-    modinfo->elf_osabi = ELFOSABI_LINUX;
+    modinfo->elf_osabi = ELFOSABI_NONE;
     modinfo->g.WriteModule = elf_write_module;
 #if 0
     printf("size Elf_Ehdr: %2u - %2u\n", sizeof(Elf32_Ehdr), sizeof(Elf64_Ehdr));
